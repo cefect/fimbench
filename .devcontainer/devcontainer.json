@@ -1,0 +1,59 @@
+{
+  "name": "fimbench_dc",
+  "dockerComposeFile": "./docker-compose.yml",
+  "service": "dev",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "forwardPorts": [8501, 8000],
+  "portsAttributes": {
+    "8501": {
+      "label": "streamlit"
+    },
+    "8000": {
+      "label": "tile-server"
+    }
+  },
+  "containerEnv": {
+    "CODEX_HOME": "/home/cefect/.codex",
+    "CLOUDSDK_CONFIG": "/home/cefect/.config/gcloud",
+    "GOOGLE_APPLICATION_CREDENTIALS": "/home/cefect/.config/gcloud/application_default_credentials.json"
+  },
+  "remoteEnv": {
+    "PATH": "/opt/conda/envs/fimbench/bin:/opt/conda/bin:${containerEnv:PATH}",
+    "CONDA_PREFIX": "/opt/conda/envs/fimbench",
+    "CONDA_DEFAULT_ENV": "fimbench"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "github.copilot",
+        "github.copilot-chat",
+        "openai.chatgpt",
+        "ms-python.debugpy",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "ms-toolsai.vscode-jupyter-powertoys",
+        "vict0rsch.coblock",
+        "hbenl.vscode-test-explorer",
+        "littlefoxteam.vscode-python-test-adapter",
+        "snakemake.snakemake-lang",
+        "mechatroner.rainbow-csv",
+        "google.geminicodeassist",
+        "george-alisson.html-preview-vscode"
+      ],
+      "settings": {
+        "python.condaPath": "/opt/conda/bin/conda",
+        "python.defaultInterpreterPath": "/opt/conda/envs/fimbench/bin/python",
+        "python.terminal.activateEnvironment": true,
+        "python.useEnvironmentsExtension": false,
+        "python-envs.defaultEnvManager": "ms-python.python:conda",
+        "python-envs.defaultPackageManager": "ms-python.python:conda",
+        "python-envs.terminal.autoActivationType": "command",
+        "remote.extensionKind": {
+          "google.geminicodeassist": ["ui"]
+        }
+      }
+    }
+  }
+}

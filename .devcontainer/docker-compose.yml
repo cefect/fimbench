@@ -1,0 +1,35 @@
+name: fimbench_compose
+services:
+  dev:
+    image: fimbench:dev
+    build:
+      context: ..
+      dockerfile: container/Dockerfile
+      target: dev
+      args:
+        CONDA_NAME: fimbench
+        PYTHON_VERSION: "3.11"
+    volumes:
+      - ..:/workspace:delegated
+      - /home/cefect/LS/10_IO:/home/cefect/LS/10_IO:delegated
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+      - /home/cefect/.config:/home/cefect/.config:rw
+      - /home/cefect/.codex:/home/cefect/.codex:rw
+    working_dir: /workspace
+    user: 1000:1000
+    ports:
+      - "8501:8501"
+      - "8000:8000"
+    tty: true
+    stdin_open: true
+    cpus: 8
+    mem_limit: 24g
+    environment:
+      XDG_CONFIG_HOME: /home/cefect/.config
+      PYTHONPATH: /workspace
+      CONDA_DEFAULT_ENV: fimbench
+      PATH: /opt/conda/envs/fimbench/bin:/opt/conda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    command:
+      - sleep
+      - infinity
