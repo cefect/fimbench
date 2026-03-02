@@ -23,7 +23,8 @@ from tqdm.auto import tqdm
 
 DEFAULT_SEARCH_DIR = "/home/cefect/LS/10_IO/2501_NSFc/FIM_Bench/fetch"
 DEFAULT_OUT_NAME = "collect_vectors.gpkg"
-DEFAULT_OUT_FP = "/home/cefect/LS/09_REPOS/05_FORKS/fimbench/collect_vectors.gpkg"
+DEFAULT_OUT_FP = "/home/cefect/LS/10_IO/2501_NSFc/FIM_Bench/fetch/collect_vectors.gpkg"
+DEFAULT_MASTER_INDEX_NAME = "master_index.geojson"
 DEFAULT_TIMEOUT_SEC = 120
 DEFAULT_MASK_RESOLUTION_M = 100.0
 
@@ -209,9 +210,9 @@ def _collect_single_record(gpkg_fp: Path, search_path: Path) -> tuple[dict, str 
         date_s = str(date_a).strip()
         if date_s.endswith(".0"):
             date_s = date_s[:-2]
-        rec["datetime"] = pd.to_datetime(date_s, format="%Y%m%d", errors="coerce")
+        rec["datetime"] = pd.to_datetime(date_s, format="%Y%m%d", errors="coerce", utc=True)
     elif pd.notna(date_b):
-        rec["datetime"] = pd.to_datetime(str(date_b).strip(), format="%Y%m%dT%H%M%S", errors="coerce")
+        rec["datetime"] = pd.to_datetime(str(date_b).strip(), format="%Y%m%dT%H%M%S", errors="coerce", utc=True)
     else:
         rec["datetime"] = pd.NaT
     rec["geometry"] = unary_union(geom_l)
@@ -280,6 +281,34 @@ def _run_single_record_with_timeout(gpkg_fp: Path, search_path: Path, timeout_se
         rec["geometry"] = wkb.loads(bytes.fromhex(result["geometry_wkb"])) if result.get("geometry_wkb") else None
         result["record"] = rec
     return result
+
+
+def _build_master_index_geojson(out_path: Path, log: logging.Logger | None = None) -> Path:
+    """Write a lightweight master index GeoJSON from the collected GeoPackage."""
+    assert isinstance(out_path, Path), "out_path must be a pathlib.Path."
+    assert out_path.exists(), f"Missing output GeoPackage: {out_path}"
+    assert log is None or isinstance(log, logging.Logger), "log must be None or logging.Logger."
+    log = log or logging.getLogger(__name__)
+
+    # Read only the required fields and geometry for the index layer.
+    src_gdf = gpd.read_file(out_path)
+    missing_l = [col_name for col_name in ["File_Name", "tier", "datetime"] if col_name not in src_gdf.columns]
+    assert not missing_l, f"Missing required columns in {out_path}: {missing_l}"
+    idx_gdf = src_gdf[["File_Name", "tier", "datetime", "geometry"]].copy()
+
+    # Parse file naming tokens into event and chip id columns.
+    token_df = idx_gdf["File_Name"].astype("string").str.extract(
+        r"^(?P<event>[^_]+_[^_]+_[^_]+_[^_]+)_(?P<chip_id>[^_.]+)(?:_.*)?$",
+        expand=True,
+    )
+    idx_gdf["event"] = token_df["event"]
+    idx_gdf["chip_id"] = token_df["chip_id"]
+    idx_gdf["datetime"] = pd.to_datetime(idx_gdf["datetime"], errors="coerce", utc=True)
+
+    out_master_fp = out_path.with_name(DEFAULT_MASTER_INDEX_NAME)
+    idx_gdf.to_file(out_master_fp, driver="GeoJSON")
+    log.info(f"Wrote master index GeoJSON to \n    {out_master_fp}")
+    return out_master_fp
 
 
 def main_collect_vectors(
@@ -430,13 +459,18 @@ def main_collect_vectors(
     date_b_s = date_b_s.map(lambda v: str(v).strip() if pd.notna(v) else pd.NA)
     case_dt_tok_s = case_s.astype("string").str.extract(r"_(\d{8}T\d{6})_", expand=False)
     case_d_tok_s = case_s.astype("string").str.extract(r"_(\d{8})_", expand=False)
-    date_a_dt = pd.to_datetime(date_a_s, format="%Y%m%d", errors="coerce")
-    date_b_dt = pd.to_datetime(date_b_s, format="%Y%m%dT%H%M%S", errors="coerce")
-    case_dt_dt = pd.to_datetime(case_dt_tok_s, format="%Y%m%dT%H%M%S", errors="coerce")
-    case_d_dt = pd.to_datetime(case_d_tok_s, format="%Y%m%d", errors="coerce")
-    base_dt = pd.to_datetime(out_gdf["datetime"], errors="coerce") if "datetime" in out_gdf.columns else pd.Series(pd.NaT, index=out_gdf.index)
+    date_a_dt = pd.to_datetime(date_a_s, format="%Y%m%d", errors="coerce", utc=True)
+    date_b_dt = pd.to_datetime(date_b_s, format="%Y%m%dT%H%M%S", errors="coerce", utc=True)
+    case_dt_dt = pd.to_datetime(case_dt_tok_s, format="%Y%m%dT%H%M%S", errors="coerce", utc=True)
+    case_d_dt = pd.to_datetime(case_d_tok_s, format="%Y%m%d", errors="coerce", utc=True)
+    base_dt = (
+        pd.to_datetime(out_gdf["datetime"], errors="coerce", utc=True)
+        if "datetime" in out_gdf.columns
+        else pd.Series(pd.NaT, index=out_gdf.index)
+    )
     out_gdf["datetime"] = base_dt.fillna(date_a_dt).fillna(date_b_dt).fillna(case_dt_dt).fillna(case_d_dt)
     out_gdf.to_file(out_path, driver="GPKG")
+    out_master_fp = _build_master_index_geojson(out_path, log=log)
 
     # Return a compact status summary for CLI runs.
     elapsed = time.perf_counter() - t0
@@ -452,6 +486,7 @@ def main_collect_vectors(
         "skipped_broken_count": skipped_broken_count,
         "record_count": len(out_gdf),
         "columns": list(out_gdf.columns),
+        "master_index_fp": str(out_master_fp),
         "log_fp": str(log_path),
         "timeout_sec": timeout_sec,
         "skipped_timeout": skipped_timeout_l[:10],
