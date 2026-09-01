@@ -24,7 +24,7 @@ services:
     tty: true
     stdin_open: true
     cpus: 8
-    mem_limit: 24g
+    mem_limit: 8g
     environment:
       XDG_CONFIG_HOME: /home/cefect/.config
       PYTHONPATH: /workspace
